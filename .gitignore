@@ -1,0 +1,8 @@
+*grb
+*grib
+*grb1
+*swp
+tests/*grb
+__pycache__/*
+gribtool/__pycache__/*
+
