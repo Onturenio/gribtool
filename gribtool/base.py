@@ -27,30 +27,19 @@ print_keys = "ls"
 
 
 class GribMessage:
-    def __new__(cls, *args, **kwargs):
-        """Prevent instantiation of GribMessage directly"""
-        raise TypeError(
-            "Cannot instantiate GribMessage directly. Clone from another"
-            " GribMessage or slice a GribSet."
-        )
-
-    @classmethod
-    def from_gid(cls, gid):
+    def __init__(self, gid):
         if not isinstance(gid, int):
             raise TypeError("gid must be an interger")
-        msg = super().__new__(cls)
-        msg._handle = gid
-        msg.loaded = True
-        return msg
+        self._handle = gid
+        self.loaded = True
 
     def __del__(self):
         self.release()
 
     def release(self):
-        # logger.debug("Releasing GribMessage instance %s", id(self))
-        if self.loaded:
+        if hasattr(self, "loaded") and self.loaded:
+            # logger.debug("Releasing GribMessage instance %s", id(self))
             grib_release(self._handle)
-            # breakpoint()
             if id(self) in GribSet._registry:
                 del GribSet._registry[id(self)]
             self.loaded = False
@@ -89,7 +78,7 @@ class GribMessage:
 
     def clone(self):
         gid = grib_clone(self._handle)
-        msg = GribMessage.from_gid(gid)
+        msg = GribMessage(gid)
         GribSet._registry[id(msg)] = [gid]
         return msg
 
@@ -136,12 +125,11 @@ class GribMessage:
 class GribSet:
     _registry = {}
 
-    def __new__(cls, *args, **kwargs):
-        """Prevent instantiation of GribSet directly"""
-        raise TypeError(
-            "Cannot instantiate GribSet directly. Use"
-            " GribSet.open_from_file or GribSet.from_gid instead."
-        )
+    # def __new__(cls, *args, **kwargs):
+    #     """Prevent instantiation of GribSet directly"""
+    #     raise TypeError(
+    #         "Cannot instantiate GribSet directly. Use" " GribSet.from_file."
+    #     )
 
     @staticmethod
     def _find_unique_items(dictionary, key):
@@ -167,29 +155,25 @@ class GribSet:
 
         return key_items
 
-    @classmethod
-    def from_file(cls, filename, headers_only=False):
-        """Open a GRIB file and return a GribSet instance."""
-        grib_file = super().__new__(cls)
-        grib_file._load(filename=filename, headers_only=headers_only)
-        return grib_file
-
-    # @classmethod
-    # def from_messages(cls, messages):
-    #     if not isinstance(messages, list):
-    #         raise TypeError("messages must be list of GribMessage instances")
-    #     for message in messages:
-    #         if not isinstance(message, GribMessage):
-    #             raise TypeError(
-    #                 "messages must be list of GribMessage instances"
-    #             )
-    #     grib_file = super().__new__(cls)
-    #     grib_file.messages = messages
-    #     grib_file.loaded = True
-    #     grib_file._registry[id(grib_file)] = [
-    #         message._handle for message in messages
-    #     ]
-    #     return grib_file
+    def __init__(self, init, headers_only=False):
+        # Open a GRIB file and return a GribSet instance."""
+        if isinstance(init, str):
+            filename = init
+            self._load(filename=filename, headers_only=headers_only)
+        elif isinstance(init, list):
+            messages = init
+            for message in messages:
+                if not isinstance(message, GribMessage):
+                    raise TypeError(
+                        "messages must be list of GribMessage instances"
+                    )
+            self.messages = messages
+            self.loaded = True
+            self._registry[id(self)] = [
+                message._handle for message in messages
+            ]
+        else:
+            raise TypeError("messages must be list of GribMessage instances")
 
     def _load(self, filename, headers_only):
         messages = []
@@ -198,7 +182,7 @@ class GribSet:
             logger.debug("Found %d messages in %s", n_messages, filename)
             for i in range(n_messages):
                 gid = grib_new_from_file(f, headers_only)
-                messages.append(GribMessage.from_gid(gid))
+                messages.append(GribMessage(gid))
         self.loaded = True
         self.messages = messages
 
@@ -221,15 +205,14 @@ class GribSet:
                 f" of which {len(unique_messages)} are unique,"
                 f" therefore released."
             )
-            # for message in uasdfnique_messages:
-            #     del message
             messages_to_release = [
                 msg for msg in self.messages if msg._handle in unique_messages
             ]
-            for msg in messages_to_release:
-                # breakpoint()
-                msg.release()
             # breakpoint()
+            for i, msg in enumerate(messages_to_release):
+                if msg.loaded:
+                    msg.release()
+                    pass
             self.messages = []
             self.loaded = False
             del self._registry[id(self)]
@@ -287,7 +270,7 @@ class GribSet:
                 "unsupported operand type(s) for +: 'GribSet' and "
                 f"'{other.__class__.__name__}'"
             )
-        return self.__class__.from_messages(self.messages + other.messages)
+        return self.__class__(self.messages + other.messages)
 
     def __str__(self):
         # Get the keys to print from the first message
@@ -333,4 +316,4 @@ class GribSet:
             else:
                 messages.append(msg)
 
-        return self.__class__.from_messages(messages)
+        return self.__class__(messages)

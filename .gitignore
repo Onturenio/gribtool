@@ -5,4 +5,5 @@
 tests/*grb
 __pycache__/*
 gribtool/__pycache__/*
+tests/__pycache__/*
 
