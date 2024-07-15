@@ -26,12 +26,86 @@ print_keys = "ls"
 # print_keys = "mars"
 
 
+class _Registry:
+    def __init__(self):
+        self.gribmessages = {}
+        self.gribsets = {}
+
+    def add_gribset(self, gribset):
+        key = id(gribset)
+        self.gribsets[key] = [msg.gid for msg in gribset.messages]
+
+    def remove_gribset(self, gribset):
+        key = id(gribset)
+        del self.gribsets[key]
+
+    def add_gribmessage(self, gribmessage):
+        key = id(gribmessage)
+        self.gribmessages[key] = [gribmessage.gid]
+
+    def remove_gribmessage(self, gribmessage):
+        key = id(gribmessage)
+        del self.gribmessages[key]
+
+    def all_gids(self):
+        # list of all items NOT in the key
+        gids = []
+        for (
+            key,
+            gids,
+        ) in self.gribmessages.items():
+            gids += gids
+        for (
+            key,
+            gids,
+        ) in self.gribsets.items():
+            gids += gids
+        return set(gids)
+
+    def find_unique_gids(self, element):
+        """Find unique gids the elements of the register"""
+        # join dictionaries
+        dictionary = {**self.gribmessages, **self.gribsets}
+        key = id(element)
+        if len(dictionary) == 0:
+            return []
+        if len(dictionary) == 1:
+            return dictionary[key]
+        # list of all items NOT in the key
+        others_items = [
+            item for k, v in dictionary.items() if k != key for item in v
+        ]
+        # breakpoint()
+
+        # list of unique items in the key which are not in others_items
+        unique_gids = [
+            item for item in dictionary[key] if item not in others_items
+        ]
+
+        return unique_gids
+
+    def __str__(self):
+        return (
+            f"Registry with {len(self.gribmessages)} GribMessages and"
+            f" {len(self.gribsets)} GribSets]."
+        )
+
+    def __len__(self):
+        return len(self.gribmessages) + len(self.gribsets)
+
+
+registry = _Registry()
+
+
 class GribMessage:
-    def __init__(self, gid):
+    def __init__(self, gid, into_registry=False):
         if not isinstance(gid, int):
             raise TypeError("gid must be an interger")
-        self._handle = gid
+        self.gid = gid
         self.loaded = True
+        self._registry = registry
+        if into_registry:
+            self._registry.add_gribmessage(self)
 
     def __del__(self):
         self.release()
@@ -39,51 +113,51 @@ class GribMessage:
     def release(self):
         if hasattr(self, "loaded") and self.loaded:
             # logger.debug("Releasing GribMessage instance %s", id(self))
-            grib_release(self._handle)
-            if id(self) in GribSet._registry:
-                del GribSet._registry[id(self)]
+            grib_release(self.gid)
+            if id(self) in self._registry.gribmessages:
+                self._registry.remove_gribmessage(self)
             self.loaded = False
 
     def __getitem__(self, key):
         try:
             if isinstance(key, tuple) and len(key) == 2:
                 key, type_ = key
-                return grib_get(self._handle, key, type_)
+                return grib_get(self.gid, key, type_)
             else:
-                return grib_get(self._handle, key)
+                return grib_get(self.gid, key)
         except KeyValueNotFoundError:
             raise KeyValueNotFoundError(
                 f"Key '{key}' not found in GRIB message"
             )
 
     def __setitem__(self, key, value):
-        grib_set(self._handle, key, value)
+        grib_set(self.gid, key, value)
 
     def _get_keys(self, print_keys):
         return {key: self[key] for key in print_keys}
 
     def get_values(self):
         return ma.masked_values(
-            grib_get_values(self._handle),
-            grib_get_double(self._handle, "missingValue"),
+            grib_get_values(self.gid),
+            grib_get_double(self.gid, "missingValue"),
             shrink=False,
         )
 
     def set_values(self, values):
         if np.any(values.mask):
-            missing = grib_get(self._handle, "missingValue")
+            missing = grib_get(self.gid, "missingValue")
             values[values.mask] = missing
-            grib_set_values(self._handle, values)
-            grib_set(self._handle, "bitmapPresent", 1)
+            grib_set_values(self.gid, values)
+            grib_set(self.gid, "bitmapPresent", 1)
 
     def clone(self):
-        gid = grib_clone(self._handle)
+        gid = grib_clone(self.gid)
         msg = GribMessage(gid)
-        GribSet._registry[id(msg)] = [gid]
+        msg._registry.add_gribmessage(msg)
         return msg
 
     def _get_keys_from_namespace(self, namespace):
-        gid = self._handle
+        gid = self.gid
         iterid = grib_keys_iterator_new(gid, namespace)
 
         dict_ = {}
@@ -123,40 +197,9 @@ class GribMessage:
 
 
 class GribSet:
-    _registry = {}
-
-    # def __new__(cls, *args, **kwargs):
-    #     """Prevent instantiation of GribSet directly"""
-    #     raise TypeError(
-    #         "Cannot instantiate GribSet directly. Use" " GribSet.from_file."
-    #     )
-
-    @staticmethod
-    def _find_unique_items(dictionary, key):
-        """Find unique items in a list member of a dictionary.
-
-        The dictionary is expected to have a list as a value for the key. This
-        function will return a set of unique items in the list given the
-        key.
-        """
-        if len(dictionary) == 0:
-            return []
-        if len(dictionary) == 1:
-            return dictionary[key]
-        # list of all items NOT in the key
-        others_items = [
-            item for k, v in dictionary.items() if k != key for item in v
-        ]
-
-        # list of unique items in the key which are not in others_items
-        key_items = [
-            item for item in dictionary[key] if item not in others_items
-        ]
-
-        return key_items
-
     def __init__(self, init, headers_only=False):
         # Open a GRIB file and return a GribSet instance."""
+        self._registry = registry
         if isinstance(init, str):
             filename = init
             self._load(filename=filename, headers_only=headers_only)
@@ -169,9 +212,7 @@ class GribSet:
                     )
             self.messages = messages
             self.loaded = True
-            self._registry[id(self)] = [
-                message._handle for message in messages
-            ]
+            self._registry.add_gribset(self)
         else:
             raise TypeError("messages must be list of GribMessage instances")
 
@@ -186,52 +227,48 @@ class GribSet:
         self.loaded = True
         self.messages = messages
 
-        # register the messages in the _registry dictionary
-        self.__class__._registry[id(self)] = [
-            message._handle for message in messages
-        ]
+        self._registry.add_gribset(self)
 
     def save(self, filename):
         with open(filename, "wb") as f:
             for message in self.messages:
-                grib_write(message._handle, f)
+                grib_write(message.gid, f)
 
     def release(self):
         if hasattr(self, "messages") and len(self.messages) > 0:
-            unique_messages = self._find_unique_items(self._registry, id(self))
+            unique_gids = self._registry.find_unique_gids(self)
+            # breakpoint()
             logger.debug(
                 f"Releasing GridFile instance {id(self)}"
                 f" with {len(self)} messages"
-                f" of which {len(unique_messages)} are unique,"
+                f" of which {len(unique_gids)} are unique,"
                 f" therefore released."
             )
             messages_to_release = [
-                msg for msg in self.messages if msg._handle in unique_messages
+                msg for msg in self.messages if msg.gid in unique_gids
             ]
-            # breakpoint()
             for i, msg in enumerate(messages_to_release):
                 if msg.loaded:
                     msg.release()
-                    pass
             self.messages = []
             self.loaded = False
-            del self._registry[id(self)]
-            # breakpoint()
+            self._registry.remove_gribset(self)
 
     def __getitem__(self, index):
         if isinstance(index, int):
             msg = self.messages[index]
-            self._registry[id(msg)] = [msg._handle]
+            self._registry.add_gribmessage(msg)
             return msg
         elif isinstance(index, slice):
             messages = self.messages[index]
-            gribset = super().__new__(GribSet)
+            gribset = self.__class__(messages)
             gribset.loaded = True
             gribset.messages = messages
+            self._registry.add_gribset(gribset)
 
-            self.__class__._registry[id(gribset)] = [
-                msg._handle for msg in messages
-            ]
+            # self.__class__._registry[id(gribset)] = [
+            #     msg.gid for msg in messages
+            # ]
             return gribset
         elif isinstance(index, tuple):
             index, key = index

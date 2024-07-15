@@ -13,7 +13,7 @@ def test_getitem_messages_are_unique(grib_name):
     b = my_grib[0]
     assert a is b
     assert isinstance(a, gt.GribMessage)
-    assert len(gt.GribSet._registry) == 3
+    assert len(gt.registry) == 3
 
 def test_getitem_gribsets_are_not_unique(grib_name):
     my_grib = gt.GribSet(grib_name)
@@ -21,7 +21,7 @@ def test_getitem_gribsets_are_not_unique(grib_name):
     d = my_grib[1:15]
     assert isinstance(c, gt.GribSet)
     assert c is not d
-    assert len(gt.GribSet._registry) == 3
+    assert len(gt.registry) == 3
 
 
 def test_getitem_slice(grib_name):
