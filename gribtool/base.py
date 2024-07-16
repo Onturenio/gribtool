@@ -2,7 +2,21 @@ import logging
 
 import numpy as np
 import numpy.ma as ma
-from gribapi import *
+from gribapi import (
+    grib_clone,
+    grib_get,
+    grib_get_double,
+    grib_get_string,
+    grib_get_values,
+    grib_keys_iterator_get_name,
+    grib_keys_iterator_new,
+    grib_keys_iterator_next,
+    grib_new_from_file,
+    grib_release,
+    grib_set,
+    grib_set_values,
+    grib_write,
+)
 from gribapi.errors import KeyValueNotFoundError
 
 logging.basicConfig(level=logging.INFO)
@@ -94,7 +108,7 @@ class _Registry:
         return len(self.gribmessages) + len(self.gribsets)
 
 
-registry = _Registry()
+_registry = _Registry()
 
 
 class GribMessage:
@@ -103,7 +117,7 @@ class GribMessage:
             raise TypeError("gid must be an interger")
         self.gid = gid
         self.loaded = True
-        self._registry = registry
+        self._registry = _registry
         if into_registry:
             self._registry.add_gribmessage(self)
 
@@ -152,8 +166,7 @@ class GribMessage:
 
     def clone(self):
         gid = grib_clone(self.gid)
-        msg = GribMessage(gid)
-        msg._registry.add_gribmessage(msg)
+        msg = GribMessage(gid, into_registry=True)
         return msg
 
     def _get_keys_from_namespace(self, namespace):
@@ -199,10 +212,14 @@ class GribMessage:
 class GribSet:
     def __init__(self, init, headers_only=False):
         # Open a GRIB file and return a GribSet instance."""
-        self._registry = registry
+        self._registry = _registry
         if isinstance(init, str):
             filename = init
-            self._load(filename=filename, headers_only=headers_only)
+            messages = self._load(filename=filename, headers_only=headers_only)
+            logger.debug(f"Found {len(messages)} messages in {filename}")
+            self.messages = messages
+            self.loaded = True
+            self._registry.add_gribset(self)
         elif isinstance(init, list):
             messages = init
             for message in messages:
@@ -219,15 +236,12 @@ class GribSet:
     def _load(self, filename, headers_only):
         messages = []
         with open(filename, "rb") as f:
-            n_messages = grib_count_in_file(f)
-            logger.debug("Found %d messages in %s", n_messages, filename)
-            for i in range(n_messages):
+            while True:
                 gid = grib_new_from_file(f, headers_only)
+                if gid is None:
+                    break
                 messages.append(GribMessage(gid))
-        self.loaded = True
-        self.messages = messages
-
-        self._registry.add_gribset(self)
+        return messages
 
     def save(self, filename):
         with open(filename, "wb") as f:

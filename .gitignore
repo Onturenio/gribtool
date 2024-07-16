@@ -2,6 +2,7 @@
 *grib
 *grb1
 *swp
+tests/*swp
 tests/*grb
 __pycache__/*
 gribtool/__pycache__/*
