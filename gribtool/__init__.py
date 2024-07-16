@@ -1,2 +1,2 @@
 from .base import *
-from .base import _registry
+from .base import _Registry

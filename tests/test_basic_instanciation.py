@@ -17,37 +17,37 @@ def test_fail_on_instantiate_GribMessage():
 def test_release_GribMessage(grib_name):
     grib_file = gt.GribSet(grib_name)
     msg = grib_file[0]
-
     grib_file.release()
     assert msg.loaded is True
     msg.release()
     assert msg.loaded is False
     assert msg.release() is None
+    # breakpoint()
 
 
 def test_registry_GribMessage(grib_name):
     grib_file = gt.GribSet(grib_name)
-    assert len(grib_file._registry) == 1
+    assert len(gt._Registry()) == 1
     msg = grib_file[0]
-    assert len(grib_file._registry) == 2
+    assert len(gt._Registry()) == 2
     msg2 = msg.clone()
-    assert len(grib_file._registry) == 3
+    assert len(gt._Registry()) == 3
     grib_file.release()
-    assert len(grib_file._registry) == 2
+    assert len(gt._Registry()) == 2
     msg.release()
-    assert len(grib_file._registry) == 1
+    assert len(gt._Registry()) == 1
     msg2.release()
-    assert len(grib_file._registry) == 0
+    assert len(gt._Registry()) == 0
 
 
 def test_clone_GribMessage(grib_name):
     grib_file = gt.GribSet(grib_name)
-    assert len(grib_file._registry) == 1
+    assert len(gt._Registry()) == 1
     msg = grib_file[0]
     grib_file.release()
-    assert len(grib_file._registry) == 1
+    assert len(gt._Registry()) == 1
     new_msg = msg.clone()
-    assert len(grib_file._registry) == 2
+    assert len(gt._Registry()) == 2
     assert isinstance(new_msg, gt.GribMessage)
     assert new_msg is not msg
     assert new_msg.gid != msg.gid
@@ -75,9 +75,9 @@ def test_fail_open_from_file():
 
 def test_release(grib_name):
     grib_file = gt.GribSet(grib_name)
-    assert len(grib_file._registry) == 1
+    assert len(gt._Registry()) == 1
     grib_file.release()
-    assert len(grib_file._registry) == 0
+    assert len(gt._Registry()) == 0
     assert len(grib_file) == 0
     assert grib_file.loaded == False
     assert grib_file.release() == None

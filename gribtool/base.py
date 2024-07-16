@@ -41,45 +41,51 @@ print_keys = "ls"
 
 
 class _Registry:
-    def __init__(self):
-        self.gribmessages = {}
-        self.gribsets = {}
+    gribmessages = {}
+    gribsets = {}
 
-    def add_gribset(self, gribset):
-        key = id(gribset)
-        self.gribsets[key] = [msg.gid for msg in gribset.messages]
+    @classmethod
+    def register(cls, item):
+        key = id(item)
+        if isinstance(item, GribMessage):
+            cls.gribmessages[key] = [item.gid]
+        elif isinstance(item, GribSet):
+            cls.gribsets[key] = [msg.gid for msg in item.messages]
+        else:
+            raise TypeError("Item must be GribMessage or GribSet instance")
 
-    def remove_gribset(self, gribset):
-        key = id(gribset)
-        del self.gribsets[key]
+    @classmethod
+    def unregister(cls, item):
+        key = id(item)
+        if isinstance(item, GribMessage):
+            if key in cls.gribmessages:
+                del cls.gribmessages[key]
+        elif isinstance(item, GribSet):
+            del cls.gribsets[key]
+        else:
+            raise TypeError("Item must be GribMessage or GribSet instance")
 
-    def add_gribmessage(self, gribmessage):
-        key = id(gribmessage)
-        self.gribmessages[key] = [gribmessage.gid]
-
-    def remove_gribmessage(self, gribmessage):
-        key = id(gribmessage)
-        del self.gribmessages[key]
-
-    def all_gids(self):
+    @classmethod
+    def all_gids(cls):
         # list of all items NOT in the key
         gids = []
         for (
             key,
             gids,
-        ) in self.gribmessages.items():
+        ) in cls.gribmessages.items():
             gids += gids
         for (
             key,
             gids,
-        ) in self.gribsets.items():
+        ) in cls.gribsets.items():
             gids += gids
         return set(gids)
 
-    def find_unique_gids(self, element):
-        """Find unique gids the elements of the register"""
+    @classmethod
+    def find_unique_gids(cls, element):
+        """Find unique gids the elements of the register."""
         # join dictionaries
-        dictionary = {**self.gribmessages, **self.gribsets}
+        dictionary = {**cls.gribmessages, **cls.gribsets}
         key = id(element)
         if len(dictionary) == 0:
             return []
@@ -89,7 +95,6 @@ class _Registry:
         others_items = [
             item for k, v in dictionary.items() if k != key for item in v
         ]
-        # breakpoint()
 
         # list of unique items in the key which are not in others_items
         unique_gids = [
@@ -108,28 +113,21 @@ class _Registry:
         return len(self.gribmessages) + len(self.gribsets)
 
 
-_registry = _Registry()
-
-
 class GribMessage:
     def __init__(self, gid, into_registry=False):
-        if not isinstance(gid, int):
-            raise TypeError("gid must be an interger")
         self.gid = gid
         self.loaded = True
-        self._registry = _registry
+        if not isinstance(gid, int):
+            self.loaded = False
+            raise TypeError("gid must be an interger")
         if into_registry:
-            self._registry.add_gribmessage(self)
-
-    def __del__(self):
-        self.release()
+            _Registry.register(self)
 
     def release(self):
         if hasattr(self, "loaded") and self.loaded:
             # logger.debug("Releasing GribMessage instance %s", id(self))
             grib_release(self.gid)
-            if id(self) in self._registry.gribmessages:
-                self._registry.remove_gribmessage(self)
+            _Registry.unregister(self)
             self.loaded = False
 
     def __getitem__(self, key):
@@ -188,7 +186,8 @@ class GribMessage:
             dict_ = self._get_keys(print_keys)
         else:
             raise TypeError(
-                "print_keys must be a list of keys or a string with a namespace"
+                "print_keys must be a list of keys or"
+                " a string with a namespace"
             )
         keys = dict_.keys()
 
@@ -208,18 +207,15 @@ class GribMessage:
 
         return heading_str + "\n" + data_str
 
+    def __del__(self):
+        self.release()
+
 
 class GribSet:
     def __init__(self, init, headers_only=False):
-        # Open a GRIB file and return a GribSet instance."""
-        self._registry = _registry
         if isinstance(init, str):
             filename = init
             messages = self._load(filename=filename, headers_only=headers_only)
-            logger.debug(f"Found {len(messages)} messages in {filename}")
-            self.messages = messages
-            self.loaded = True
-            self._registry.add_gribset(self)
         elif isinstance(init, list):
             messages = init
             for message in messages:
@@ -227,11 +223,11 @@ class GribSet:
                     raise TypeError(
                         "messages must be list of GribMessage instances"
                     )
-            self.messages = messages
-            self.loaded = True
-            self._registry.add_gribset(self)
         else:
             raise TypeError("messages must be list of GribMessage instances")
+        self.messages = messages
+        self.loaded = True
+        _Registry.register(self)
 
     def _load(self, filename, headers_only):
         messages = []
@@ -241,6 +237,7 @@ class GribSet:
                 if gid is None:
                     break
                 messages.append(GribMessage(gid))
+        logger.debug(f"Found {len(messages)} messages in {filename}")
         return messages
 
     def save(self, filename):
@@ -250,8 +247,7 @@ class GribSet:
 
     def release(self):
         if hasattr(self, "messages") and len(self.messages) > 0:
-            unique_gids = self._registry.find_unique_gids(self)
-            # breakpoint()
+            unique_gids = _Registry.find_unique_gids(self)
             logger.debug(
                 f"Releasing GridFile instance {id(self)}"
                 f" with {len(self)} messages"
@@ -261,17 +257,18 @@ class GribSet:
             messages_to_release = [
                 msg for msg in self.messages if msg.gid in unique_gids
             ]
-            for i, msg in enumerate(messages_to_release):
+            # for i, msg in enumerate(messages_to_release):
+            for msg in messages_to_release:
                 if msg.loaded:
                     msg.release()
             self.messages = []
             self.loaded = False
-            self._registry.remove_gribset(self)
+            _Registry.unregister(self)
 
     def __getitem__(self, index):
         if isinstance(index, int):
             msg = self.messages[index]
-            self._registry.add_gribmessage(msg)
+            _Registry.register(msg)
             return msg
         elif isinstance(index, slice):
             messages = self.messages[index]
@@ -331,7 +328,8 @@ class GribSet:
             dict_ = self[0]._get_keys(print_keys)
         else:
             raise TypeError(
-                "print_keys must be a list of keys or a string with a namespace"
+                "print_keys must be a list of keys "
+                "or a string with a namespace"
             )
         keys = dict_.keys()
 
