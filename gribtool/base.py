@@ -69,16 +69,10 @@ class _Registry:
     def all_gids(cls):
         # list of all items NOT in the key
         gids = []
-        for (
-            key,
-            gids,
-        ) in cls.gribmessages.items():
-            gids += gids
-        for (
-            key,
-            gids,
-        ) in cls.gribsets.items():
-            gids += gids
+        for gids in cls.gribmessages.values():
+            gids.extend(gids)
+        for gids in cls.gribsets.values():
+            gids.extend(gids)
         return set(gids)
 
     @classmethod
@@ -114,13 +108,22 @@ class _Registry:
 
 
 class GribMessage:
-    def __init__(self, gid, into_registry=False):
+    def __init__(self, gid, no_registry=False, is_clone=False):
         self.gid = gid
         self.loaded = True
-        if not isinstance(gid, int):
-            self.loaded = False
-            raise TypeError("gid must be an interger")
-        if into_registry:
+        if no_registry:
+            return
+        else:
+            if is_clone:
+                _Registry.register(self)
+                return
+            if gid not in _Registry.all_gids():
+                # breakpoint()
+                self.loaded = False
+                raise TypeError(
+                    "Message must be be previously loaded into memory"
+                    " with a valid gid."
+                )
             _Registry.register(self)
 
     def release(self):
@@ -164,7 +167,7 @@ class GribMessage:
 
     def clone(self):
         gid = grib_clone(self.gid)
-        msg = GribMessage(gid, into_registry=True)
+        msg = GribMessage(gid, is_clone=True)
         return msg
 
     def _get_keys_from_namespace(self, namespace):
@@ -214,8 +217,7 @@ class GribMessage:
 class GribSet:
     def __init__(self, init, headers_only=False):
         if isinstance(init, str):
-            filename = init
-            messages = self._load(filename=filename, headers_only=headers_only)
+            messages = self._load(filename=init, headers_only=headers_only)
         elif isinstance(init, list):
             messages = init
             for message in messages:
@@ -224,7 +226,9 @@ class GribSet:
                         "messages must be list of GribMessage instances"
                     )
         else:
-            raise TypeError("messages must be list of GribMessage instances")
+            raise TypeError(
+                "messages must be a string or a list of GribMessage instances"
+            )
         self.messages = messages
         self.loaded = True
         _Registry.register(self)
@@ -236,7 +240,7 @@ class GribSet:
                 gid = grib_new_from_file(f, headers_only)
                 if gid is None:
                     break
-                messages.append(GribMessage(gid))
+                messages.append(GribMessage(gid, no_registry=True))
         logger.debug(f"Found {len(messages)} messages in {filename}")
         return messages
 
@@ -273,9 +277,9 @@ class GribSet:
         elif isinstance(index, slice):
             messages = self.messages[index]
             gribset = self.__class__(messages)
-            gribset.loaded = True
-            gribset.messages = messages
-            self._registry.add_gribset(gribset)
+            # gribset.loaded = True
+            # gribset.messages = messages
+            # self._registry.add_gribset(gribset)
 
             # self.__class__._registry[id(gribset)] = [
             #     msg.gid for msg in messages
