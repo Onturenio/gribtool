@@ -108,23 +108,31 @@ class _Registry:
 
 
 class GribMessage:
-    def __init__(self, gid, no_registry=False, is_clone=False):
-        self.gid = gid
-        self.loaded = True
-        if no_registry:
-            return
-        else:
-            if is_clone:
-                _Registry.register(self)
-                return
-            if gid not in _Registry.all_gids():
-                # breakpoint()
-                self.loaded = False
-                raise TypeError(
-                    "Message must be be previously loaded into memory"
-                    " with a valid gid."
-                )
-            _Registry.register(self)
+
+    def __new__(cls, *args, **kwargs):
+        """Prevent instantiation of GribMessage directly"""
+        raise TypeError(
+            "Cannot instantiate GribMessage directly. Clone from another"
+            " GribMessage or slice a GribSet."
+        )
+
+    # def __init__(self, gid, no_registry=False, is_clone=False):
+    #     self.gid = gid
+    #     self.loaded = True
+    #     if no_registry:
+    #         return
+    #     else:
+    #         if is_clone:
+    #             _Registry.register(self)
+    #             return
+    #         if gid not in _Registry.all_gids():
+    #             # breakpoint()
+    #             self.loaded = False
+    #             raise TypeError(
+    #                 "Message must be be previously loaded into memory"
+    #                 " with a valid gid."
+    #             )
+    #         _Registry.register(self)
 
     def release(self):
         if hasattr(self, "loaded") and self.loaded:
@@ -167,7 +175,10 @@ class GribMessage:
 
     def clone(self):
         gid = grib_clone(self.gid)
-        msg = GribMessage(gid, is_clone=True)
+        msg = super().__new__(GribMessage)
+        msg.gid = gid
+        msg.loaded = True
+        _Registry.register(msg)
         return msg
 
     def _get_keys_from_namespace(self, namespace):
@@ -240,7 +251,10 @@ class GribSet:
                 gid = grib_new_from_file(f, headers_only)
                 if gid is None:
                     break
-                messages.append(GribMessage(gid, no_registry=True))
+                msg = super().__new__(GribMessage)
+                msg.gid = gid
+                msg.loaded = True
+                messages.append(msg)
         logger.debug(f"Found {len(messages)} messages in {filename}")
         return messages
 

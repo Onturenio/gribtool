@@ -23,6 +23,7 @@ def test_GribSet_gettitems(grib_name):
     assert my_grib[0, "shortName"] == "t"
     assert my_grib[0:2, "shortName"] == ["t", "z"]
 
+
 @pytest.mark.devel
 def test_GribSet_gettitems_fail(grib_name):
     my_grib = gt.GribSet(grib_name)

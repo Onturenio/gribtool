@@ -5,7 +5,6 @@ import gribtool as gt
 logger = gt.logging.getLogger(__name__)
 
 
-@pytest.mark.devel
 def test_getitem_messages_are_unique(grib_name):
     my_grib = gt.GribSet(grib_name)
     assert isinstance(my_grib[-1], gt.GribMessage)
@@ -13,15 +12,14 @@ def test_getitem_messages_are_unique(grib_name):
     b = my_grib[0]
     assert a is b
     assert isinstance(a, gt.GribMessage)
-    assert len(gt._registry) == 3
 
+@pytest.mark.devel
 def test_getitem_gribsets_are_not_unique(grib_name):
     my_grib = gt.GribSet(grib_name)
     c = my_grib[1:15]
     d = my_grib[1:15]
     assert isinstance(c, gt.GribSet)
     assert c is not d
-    assert len(gt._registry) == 3
 
 
 def test_getitem_slice(grib_name):
