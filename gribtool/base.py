@@ -22,22 +22,42 @@ from gribapi.errors import KeyValueNotFoundError
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-print_keys = [
-    "edition",
-    "centre",
-    "typeOfLevel",
-    "level",
-    "dataDate",
-    "stepRange",
-    "shortName",
-    "packingType",
-    "gridType",
-]
 
 print_keys = "ls"
 # print_keys = "asdf"
 # print_keys = "time"
 # print_keys = "mars"
+
+
+class Config:
+    def __init__(self, **kwargs):
+        if "print_keys" in kwargs and "namespace" in kwargs:
+            raise ValueError(
+                "print_keys and namespace cannot be provided together"
+            )
+        default_print_keys = [
+            "edition",
+            "centre",
+            "typeOfLevel",
+            "level",
+            "dataDate",
+            "stepRange",
+            "shortName",
+            "packingType",
+            "gridType",
+        ]
+        self.namespace = kwargs.get("namespace", None)
+        if kwargs.get("print_keys", None):
+            self.print_keys = kwargs.pop("print_keys")
+        else:
+            self.print_keys = default_print_keys
+
+config = Config()
+
+def set_config(conf=Config()):
+    global config
+    config = conf
+
 
 
 class _Registry:
@@ -67,7 +87,6 @@ class _Registry:
 
     @classmethod
     def all_gids(cls):
-        # list of all items NOT in the key
         gids = []
         for gids in cls.gribmessages.values():
             gids.extend(gids)
@@ -108,7 +127,6 @@ class _Registry:
 
 
 class GribMessage:
-
     def __new__(cls, *args, **kwargs):
         """Prevent instantiation of GribMessage directly"""
         raise TypeError(
@@ -116,26 +134,9 @@ class GribMessage:
             " GribMessage or slice a GribSet."
         )
 
-    # def __init__(self, gid, no_registry=False, is_clone=False):
-    #     self.gid = gid
-    #     self.loaded = True
-    #     if no_registry:
-    #         return
-    #     else:
-    #         if is_clone:
-    #             _Registry.register(self)
-    #             return
-    #         if gid not in _Registry.all_gids():
-    #             # breakpoint()
-    #             self.loaded = False
-    #             raise TypeError(
-    #                 "Message must be be previously loaded into memory"
-    #                 " with a valid gid."
-    #             )
-    #         _Registry.register(self)
-
     def release(self):
-        if hasattr(self, "loaded") and self.loaded:
+        # if hasattr(self, "loaded") and self.loaded:
+        if self.loaded:
             # logger.debug("Releasing GribMessage instance %s", id(self))
             grib_release(self.gid)
             _Registry.unregister(self)
@@ -156,16 +157,6 @@ class GribMessage:
     def __setitem__(self, key, value):
         grib_set(self.gid, key, value)
 
-    def _get_keys(self, print_keys):
-        return {key: self[key] for key in print_keys}
-
-    def get_values(self):
-        return ma.masked_values(
-            grib_get_values(self.gid),
-            grib_get_double(self.gid, "missingValue"),
-            shrink=False,
-        )
-
     def set_values(self, values):
         if np.any(values.mask):
             missing = grib_get(self.gid, "missingValue")
@@ -180,6 +171,16 @@ class GribMessage:
         msg.loaded = True
         _Registry.register(msg)
         return msg
+
+    def get_values(self):
+        return ma.masked_values(
+            grib_get_values(self.gid),
+            grib_get_double(self.gid, "missingValue"),
+            shrink=False,
+        )
+
+    def _get_keys(self, print_keys):
+        return {key: self[key] for key in print_keys}
 
     def _get_keys_from_namespace(self, namespace):
         gid = self.gid
@@ -227,6 +228,7 @@ class GribMessage:
 
 class GribSet:
     def __init__(self, init, headers_only=False):
+        self.messages = []
         if isinstance(init, str):
             messages = self._load(filename=init, headers_only=headers_only)
         elif isinstance(init, list):
@@ -291,13 +293,6 @@ class GribSet:
         elif isinstance(index, slice):
             messages = self.messages[index]
             gribset = self.__class__(messages)
-            # gribset.loaded = True
-            # gribset.messages = messages
-            # self._registry.add_gribset(gribset)
-
-            # self.__class__._registry[id(gribset)] = [
-            #     msg.gid for msg in messages
-            # ]
             return gribset
         elif isinstance(index, tuple):
             index, key = index
@@ -337,6 +332,14 @@ class GribSet:
                 f"'{other.__class__.__name__}'"
             )
         return self.__class__(self.messages + other.messages)
+
+    def __mul__(self, other):
+        if not isinstance(other, int):
+            raise TypeError(
+                "unsupported operand type(s) for *: 'GribSet' and "
+                f"'{other.__class__.__name__}'"
+            )
+        return self.__class__(self.messages * other)
 
     def __str__(self):
         # Get the keys to print from the first message

@@ -63,6 +63,7 @@ def test_clone_GribMessage(grib_name):
     assert len(_Registry.gribmessages) == 2
 
 
+@pytest.mark.devel
 def test_fail_on_instantiate_GribSet():
     with pytest.raises(TypeError):
         gt.GribSet()
@@ -81,7 +82,6 @@ def test_open_from_file(grib_name):
     assert grib_file.loaded == True
 
 
-@pytest.mark.devel
 def test_open_from_GribMessages(grib_name):
     grib_file = gt.GribSet(grib_name)
     msg1 = grib_file[0]

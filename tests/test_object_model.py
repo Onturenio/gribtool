@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 import gribtool as gt
@@ -23,12 +25,25 @@ def test_sum(grib_name):
     my_grib2.save("test_sum.grb")
     with gt.GribSet("test_sum.grb") as my_grib3:
         assert len(my_grib3) == 18
+    os.remove("test_sum.grb")
 
 
 def test_sum_fail(grib_name):
     my_grib = gt.GribSet(grib_name)
     with pytest.raises(TypeError):
         my_grib + "not a gribset"
+
+
+def test_mul(grib_name):
+    my_grib = gt.GribSet(grib_name)
+
+    my_grib2 = my_grib * 2
+    my_grib2.save("test_mul.grb")
+    my_grib2.release()
+    with gt.GribSet("test_mul.grb") as my_grib3:
+        assert len(my_grib3) == len(my_grib) * 2
+    os.remove("test_mul.grb")
+
 
 @pytest.mark.devel
 def test_print(grib_name):
