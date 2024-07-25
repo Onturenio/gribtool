@@ -1,8 +1,10 @@
+import logging
+
 import pytest
 
 import gribtool as gt
 
-logger = gt.logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def test_getitem_messages_are_unique(grib_name):
@@ -12,6 +14,7 @@ def test_getitem_messages_are_unique(grib_name):
     b = my_grib[0]
     assert a is b
     assert isinstance(a, gt.GribMessage)
+
 
 @pytest.mark.devel
 def test_getitem_gribsets_are_not_unique(grib_name):

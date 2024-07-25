@@ -1,3 +1,4 @@
+import logging
 import os
 
 import gribapi
@@ -7,7 +8,7 @@ import pytest
 
 import gribtool as gt
 
-logger = gt.logging.getLogger("grib_tool")
+logger = logging.getLogger("grib_tool")
 
 
 def test_get_values(grib_name):
@@ -57,14 +58,15 @@ def test_get_values(grib_name):
 #         plt.show()
 
 
-    # plt.imshow(values_missing)
-    # plt.show()
-    # breakpoint()
-    # plt.imshow(values_nomissing)
-    # plt.show()
-    # breakpoint()
-    # plt.imshow(values_newmissing)
-    # plt.show()
+# plt.imshow(values_missing)
+# plt.show()
+# breakpoint()
+# plt.imshow(values_nomissing)
+# plt.show()
+# breakpoint()
+# plt.imshow(values_newmissing)
+# plt.show()
+
 
 # @pytest.mark.devel
 def test_missing_values(grib_name):

@@ -1,10 +1,11 @@
+import logging
 import os
 
 import pytest
 
 import gribtool as gt
 
-logger = gt.logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def test_iter(grib_name):
@@ -48,6 +49,6 @@ def test_mul(grib_name):
 @pytest.mark.devel
 def test_print(grib_name):
     my_grib = gt.GribSet(grib_name)
-    print(my_grib[0])
-    print(my_grib[0:5])
-    assert True
+    assert len(str(my_grib[0]).split("\n")) == 2
+    # print(my_grib[0:5])
+    assert len(str(my_grib[0:5]).split("\n")) == 8

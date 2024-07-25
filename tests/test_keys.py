@@ -1,8 +1,10 @@
+import logging
+
 import pytest
 
 import gribtool as gt
 
-logger = gt.logging.getLogger("grib_tool")
+logger = logging.getLogger("grib_tool")
 
 
 def test_GribMessage_getitem(grib_name):

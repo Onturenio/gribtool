@@ -19,45 +19,10 @@ from gribapi import (
 )
 from gribapi.errors import KeyValueNotFoundError
 
+import gribtool.config
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-print_keys = "ls"
-# print_keys = "asdf"
-# print_keys = "time"
-# print_keys = "mars"
-
-
-class Config:
-    def __init__(self, **kwargs):
-        if "print_keys" in kwargs and "namespace" in kwargs:
-            raise ValueError(
-                "print_keys and namespace cannot be provided together"
-            )
-        default_print_keys = [
-            "edition",
-            "centre",
-            "typeOfLevel",
-            "level",
-            "dataDate",
-            "stepRange",
-            "shortName",
-            "packingType",
-            "gridType",
-        ]
-        self.namespace = kwargs.get("namespace", None)
-        if kwargs.get("print_keys", None):
-            self.print_keys = kwargs.pop("print_keys")
-        else:
-            self.print_keys = default_print_keys
-
-config = Config()
-
-def set_config(conf=Config()):
-    global config
-    config = conf
-
 
 
 class _Registry:
@@ -194,15 +159,16 @@ class GribMessage:
         return dict_
 
     def __str__(self):
-        # Get the keys to print
-        if isinstance(print_keys, str):
-            dict_ = self._get_keys_from_namespace(print_keys)
-        elif isinstance(print_keys, list):
-            dict_ = self._get_keys(print_keys)
+        if gribtool.config.rcParams.namespace:
+            dict_ = self._get_keys_from_namespace(
+                gribtool.config.rcParams.namespace
+            )
+        elif gribtool.config.rcParams.print_keys:
+            dict_ = self._get_keys(gribtool.config.rcParams.print_keys)
         else:
             raise TypeError(
-                "print_keys must be a list of keys or"
-                " a string with a namespace"
+                "print_keys must be a list of keys "
+                "or a string with a namespace"
             )
         keys = dict_.keys()
 
@@ -343,10 +309,12 @@ class GribSet:
 
     def __str__(self):
         # Get the keys to print from the first message
-        if isinstance(print_keys, str):
-            dict_ = self[0]._get_keys_from_namespace(print_keys)
-        elif isinstance(print_keys, list):
-            dict_ = self[0]._get_keys(print_keys)
+        if gribtool.config.rcParams.namespace:
+            dict_ = self[0]._get_keys_from_namespace(
+                gribtool.config.rcParams.namespace
+            )
+        elif gribtool.config.rcParams.print_keys:
+            dict_ = self[0]._get_keys(gribtool.config.rcParams.print_keys)
         else:
             raise TypeError(
                 "print_keys must be a list of keys "
@@ -366,14 +334,37 @@ class GribSet:
         heading_str = "  ".join(f"{key:>{width[key]}}" for key in keys)
 
         # Format the rows
-        data_str = ""
-        for msg in self.messages:
-            # breakpoint()
-            dict_ = msg._get_keys(keys)
-            data_str += "  ".join(
-                f"{str(dict_[key]):>{width[key]}}" for key in keys
-            )
-            data_str += "\n"
+        max_rows = gribtool.config.rcParams.max_rows
+
+        if max_rows is None:
+            # If max_rows is less than 4, print all rows
+            data_str = ""
+            for i, msg in enumerate(self.messages):
+                dict_ = msg._get_keys(keys)
+                data_str += "  ".join(
+                    f"{str(dict_[key]):>{width[key]}}" for key in keys
+                )
+                data_str += "\n"
+        else:
+            # else print first and last with elipsis in between
+            data_str = ""
+            for i, msg in enumerate(self.messages):
+                if i < max_rows // 2:
+                    dict_ = msg._get_keys(keys)
+                    data_str += "  ".join(
+                        f"{str(dict_[key]):>{width[key]}}" for key in keys
+                    )
+                    data_str += "\n"
+                elif i == max_rows // 2:
+                    data_str += "...\n"
+                elif i > len(self.messages) - max_rows // 2:
+                    dict_ = msg._get_keys(keys)
+                    data_str += "  ".join(
+                        f"{str(dict_[key]):>{width[key]}}" for key in keys
+                    )
+                    data_str += "\n"
+            # append the number of records
+            data_str += f"{len(self.messages)} messages\n"
 
         return heading_str + "\n" + data_str
 

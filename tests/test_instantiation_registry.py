@@ -1,10 +1,12 @@
+import logging
+
 import numpy.ma as ma
 import pytest
 
 import gribtool as gt
 from gribtool.base import _Registry
 
-logger = gt.logging.getLogger("grib_tool")
+logger = logging.getLogger("grib_tool")
 
 
 def test_fail_on_instantiate_GribMessage():
